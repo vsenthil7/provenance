@@ -1,13 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { gql, GraphQLError } from './client';
 
+let mockFetch: ReturnType<typeof vi.fn>;
+
 beforeEach(() => {
-  globalThis.fetch = vi.fn() as unknown as typeof fetch;
+  mockFetch = vi.fn();
+  // vi.stubGlobal handles the case where globalThis.fetch is non-writable
+  // (Node 24 / undici behaviour). Direct assignment fails.
+  vi.stubGlobal('fetch', mockFetch);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('gql client', () => {
   it('returns data on success', async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: { hello: 'world' } }),
     });
@@ -16,23 +25,23 @@ describe('gql client', () => {
   });
 
   it('passes variables through', async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: { x: 1 } }),
     });
     await gql('query Q($id: String!) { x(id: $id) }', { id: 'abc' });
-    const call = (globalThis.fetch as any).mock.calls[0];
+    const call = mockFetch.mock.calls[0];
     const body = JSON.parse(call[1].body);
     expect(body.variables).toEqual({ id: 'abc' });
   });
 
   it('throws GraphQLError on non-2xx', async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({ ok: false, status: 503 });
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 503 });
     await expect(gql('query {}')).rejects.toThrow(GraphQLError);
   });
 
   it('throws GraphQLError when errors are present', async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ errors: [{ message: 'bad' }] }),
     });
@@ -40,7 +49,7 @@ describe('gql client', () => {
   });
 
   it('throws GraphQLError when data is missing', async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     });

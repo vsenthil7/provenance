@@ -9,9 +9,26 @@ vi.mock('@/lib/r2', async () => {
   };
 });
 
-import { POST } from './route';
+// HeadObjectCommand is constructed inside the route; if we make its
+// constructor throw, the route's try/catch handles it as the
+// "object not found" 404 path. This avoids the unhandled-rejection
+// gymnastics required to mock send() to reject on Node 24.
+vi.mock('@aws-sdk/client-s3', async () => {
+  const actual = await vi.importActual<any>('@aws-sdk/client-s3');
+  return {
+    ...actual,
+    // Default: real HeadObjectCommand. Tests override per-case via vi.mocked().
+    HeadObjectCommand: vi.fn((input: unknown) => ({ input })),
+  };
+});
 
-beforeEach(() => send.mockReset());
+import { POST } from './route';
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
+
+beforeEach(() => {
+  send.mockReset();
+  vi.mocked(HeadObjectCommand).mockImplementation(((input: unknown) => ({ input })) as never);
+});
 
 const validHash = 'a'.repeat(64);
 const makeReq = (body: unknown): any => ({ json: async () => body });
@@ -41,10 +58,15 @@ describe('POST /api/finalize', () => {
     expect(res.status).toBe(400);
   });
 
-  it('404 when object missing (S3 throws)', async () => {
-    send.mockRejectedValue(new Error('NoSuchKey'));
+  it('404 when S3 head call throws (covers catch branch)', async () => {
+    vi.mocked(HeadObjectCommand).mockImplementation((() => {
+      throw new Error('NoSuchKey');
+    }) as never);
     const res = await POST(makeReq({ contentType: 'image/png', contentHash: validHash }));
     expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.error).toBe('object not found');
+    expect(json.detail).toBe('NoSuchKey');
   });
 
   it('404 when object zero-length', async () => {
