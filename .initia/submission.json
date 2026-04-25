@@ -1,0 +1,93 @@
+{
+  "$schema": "https://raw.githubusercontent.com/initia-labs/initiate-submissions/main/schema.json",
+  "hackathon": "HACK0016",
+  "project": {
+    "name": "Provenance",
+    "tagline": "Royalties enforced by Move resources, not marketplace policy.",
+    "description": "Provenance is a Move-based MiniMove appchain on Initia where digital artworks are first-class Object<Artwork> resources and royalty enforcement is structural rather than aspirational. The only code path that can simultaneously move an artwork and accept INIT lives inside provenance::royalty::settle, gated by Move's friend visibility. Free transfers (gifts) are explicitly allowed and emit GiftEvent. The result: a marketplace where royalty-skipping is unconstructable, not just discouraged.",
+    "category": "marketplace",
+    "tags": ["nft", "royalties", "minimove", "interwovenkit", ".init", "bridge"]
+  },
+  "team": {
+    "name": "Provenance",
+    "members": [
+      { "role": "builder", "github": "REPLACE", "x": "REPLACE", "discord": "REPLACE" }
+    ]
+  },
+  "links": {
+    "repo": "https://github.com/REPLACE/provenance",
+    "live_app": "https://provenance.app",
+    "rpc": "https://rpc.provenance-1.initia.xyz",
+    "demo_video": "REPLACE-youtube-unlisted-url",
+    "initiascan": "https://scan.testnet.initia.xyz/provenance-1",
+    "architecture_doc": "https://github.com/REPLACE/provenance/blob/main/docs/ARCHITECTURE.md",
+    "initia_integration_doc": "https://github.com/REPLACE/provenance/blob/main/docs/INITIA_INTEGRATION.md"
+  },
+  "chain": {
+    "rollup_chain_id": "provenance-1",
+    "vm": "minimove",
+    "settlement": "initiation-2",
+    "data_availability": "celestia-mocha-4",
+    "package_address": "REPLACE-init1...",
+    "first_block_at": "REPLACE-iso8601"
+  },
+  "initia_primitives_used": {
+    "interwovenkit": {
+      "load_bearing": true,
+      "version_pinned": "2.4.0",
+      "files": ["apps/web/app/providers.tsx", "apps/web/components/wallet/ConnectButton.tsx"]
+    },
+    "auto_signing_authz": {
+      "load_bearing": true,
+      "scope": "provenance::auction::place_bid",
+      "spend_cap_uinit": "20000000",
+      "default_duration_secs": 3600,
+      "max_duration_secs": 86400,
+      "files": ["apps/web/lib/authz/index.ts", "apps/web/app/settings/sessions/page.tsx"]
+    },
+    "init_usernames": {
+      "load_bearing": true,
+      "files": ["apps/web/lib/usernames/index.ts"],
+      "fallback_path_tested": true
+    },
+    "interwoven_bridge": {
+      "load_bearing_for_go_to_market": true,
+      "files": ["apps/web/components/bridge/AddFundsButton.tsx"]
+    },
+    "minimove_appchain": {
+      "load_bearing": true,
+      "files": ["contracts/sources/*.move"]
+    },
+    "opinit_stack": {
+      "load_bearing_for_ops": true,
+      "files": ["infra/cloud-init/bootstrap.yml"]
+    }
+  },
+  "honest_caveats": [
+    "v0.1.0 is hackathon software. Six conditions remain between this and a production release; they are listed at /status on the live app and in docs/CUSTOMER_BUYER_REVIEW.md.",
+    "Image bytes live on R2 only; an IPFS mirror is committed for v1.1. The on-chain content_hash means any party with a copy can rehost.",
+    "Move modules are not externally audited. Single-builder team. Tomas (notional auditor persona) reviewed; no external sign-off.",
+    "Single sequencer, single challenger. Decentralisation is a v1.x roadmap item.",
+    "No wash-trade detection. Acknowledged in customer-buyer review."
+  ],
+  "test_discipline": {
+    "move_coverage_target_pct": 100,
+    "frontend_coverage_target_pct": 100,
+    "indexer_coverage_target_pct": 100,
+    "playwright_journeys": [
+      "wallet-connect",
+      "mint",
+      "auction",
+      "royalty",
+      "bridge-buy",
+      "sequencer-down"
+    ],
+    "post_deploy_smoke": "every Vercel deploy",
+    "coverage_exemption_budget": 5,
+    "coverage_exemption_used": 0
+  },
+  "license": {
+    "code": "MIT",
+    "docs": "CC-BY-SA-4.0"
+  }
+}

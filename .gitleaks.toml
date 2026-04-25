@@ -1,0 +1,23 @@
+# gitleaks config — Provenance
+# Scanned via husky pre-commit and CI.
+
+title = "Provenance gitleaks config"
+
+[extend]
+useDefault = true
+
+# allowlist for documented patterns that aren't real secrets
+[allowlist]
+description = "test fixtures and documented examples"
+paths = [
+  '''docs/.+\.md''',
+  '''.+\.example$''',
+  '''.+\.test\.ts$''',
+  '''.+\.spec\.ts$''',
+  '''contracts/tests/.+\.move$''',
+]
+
+# Initia bech32 addresses are not secrets
+regexes = [
+  '''init1[a-z0-9]{38,58}''',
+]

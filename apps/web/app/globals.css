@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-ink: #111111;
+  --color-paper: #faf9f6;
+  --color-accent: #d14f1b;
+}
+
+body {
+  font-feature-settings:
+    'ss01' on,
+    'cv11' on;
+}
+
+/* Distinctive: hairline rules, generous tracking on display type */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}

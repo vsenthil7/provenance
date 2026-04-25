@@ -1,0 +1,272 @@
+#cloud-config
+# Provenance rollup VM bootstrap.
+# Templated via Terraform; ${weave_init_payload}, ${better_stack_token},
+# ${discord_webhook_url}, ${rpc_hostname} are interpolated at apply time.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - jq
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - debian-keyring
+  - debian-archive-keyring
+  - apt-transport-https
+  - gnupg
+  - lsb-release
+
+write_files:
+  # ---------- Caddy ---------------------------------------------------------
+  - path: /etc/caddy/Caddyfile
+    permissions: '0644'
+    content: |
+      {
+        email ops@provenance.app
+        admin off
+      }
+      ${rpc_hostname} {
+        encode zstd gzip
+        reverse_proxy 127.0.0.1:26657
+        log {
+          output file /var/log/caddy/access.log
+          format json
+        }
+      }
+
+  # ---------- minitiad systemd unit ----------------------------------------
+  - path: /etc/systemd/system/minitiad.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Provenance MiniMove sequencer (minitiad)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=initia
+      Group=initia
+      WorkingDirectory=/home/initia
+      ExecStart=/usr/local/bin/minitiad start --home /home/initia/.minitia
+      Restart=always
+      RestartSec=5
+      LimitNOFILE=65535
+
+      # Hardening per DEPLOYMENT_TOPOLOGY §2.3
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=read-only
+      ReadWritePaths=/home/initia/.minitia /var/log
+      ProtectKernelTunables=yes
+      ProtectKernelModules=yes
+      ProtectControlGroups=yes
+      RestrictSUIDSGID=yes
+      LockPersonality=yes
+      MemoryDenyWriteExecute=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # ---------- opinit-executor systemd unit ---------------------------------
+  - path: /etc/systemd/system/opinit-executor.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Provenance OPinit executor (batch submitter)
+      After=minitiad.service network-online.target
+      Requires=minitiad.service
+
+      [Service]
+      Type=simple
+      User=initia
+      Group=initia
+      WorkingDirectory=/home/initia
+      ExecStart=/usr/local/bin/opinitd executor start --home /home/initia/.opinit
+      Restart=always
+      RestartSec=10
+
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=read-only
+      ReadWritePaths=/home/initia/.opinit
+      ProtectKernelTunables=yes
+      ProtectKernelModules=yes
+      ProtectControlGroups=yes
+      RestrictSUIDSGID=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # ---------- opinit-challenger systemd unit -------------------------------
+  - path: /etc/systemd/system/opinit-challenger.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Provenance OPinit challenger
+      After=minitiad.service network-online.target
+      Requires=minitiad.service
+
+      [Service]
+      Type=simple
+      User=initia
+      Group=initia
+      WorkingDirectory=/home/initia
+      ExecStart=/usr/local/bin/opinitd challenger start --home /home/initia/.opinit-challenger
+      Restart=always
+      RestartSec=10
+
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=read-only
+      ReadWritePaths=/home/initia/.opinit-challenger
+      ProtectKernelTunables=yes
+      ProtectKernelModules=yes
+      ProtectControlGroups=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # ---------- Better Stack vector config (logs + metrics) ------------------
+  - path: /etc/vector/vector.yaml
+    permissions: '0644'
+    content: |
+      sources:
+        journal:
+          type: journald
+          include_units:
+            - minitiad.service
+            - opinit-executor.service
+            - opinit-challenger.service
+            - caddy.service
+
+        node_metrics:
+          type: prometheus_scrape
+          endpoints:
+            - http://127.0.0.1:26660/metrics
+
+      sinks:
+        better_stack_logs:
+          type: http
+          inputs: [journal]
+          uri: https://in.logs.betterstack.com
+          encoding:
+            codec: json
+          auth:
+            strategy: bearer
+            token: ${better_stack_token}
+
+        better_stack_metrics:
+          type: http
+          inputs: [node_metrics]
+          uri: https://in.metrics.betterstack.com
+          encoding:
+            codec: json
+          auth:
+            strategy: bearer
+            token: ${better_stack_token}
+
+  # ---------- weave init payload (sensitive) -------------------------------
+  - path: /home/initia/weave-init-payload.b64
+    permissions: '0600'
+    owner: 'initia:initia'
+    content: |
+      ${weave_init_payload}
+
+  # ---------- alert webhook for cron-based fallback alerts -----------------
+  - path: /etc/provenance/alert-webhook
+    permissions: '0600'
+    content: |
+      ${discord_webhook_url}
+
+  # ---------- height-stuck watchdog (30s tick) -----------------------------
+  - path: /usr/local/bin/check-height.sh
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      WEBHOOK="$(cat /etc/provenance/alert-webhook)"
+      H1=$(curl -fs http://127.0.0.1:26657/status | jq -r '.result.sync_info.latest_block_height')
+      sleep 30
+      H2=$(curl -fs http://127.0.0.1:26657/status | jq -r '.result.sync_info.latest_block_height')
+      if [ "$H1" = "$H2" ]; then
+        curl -X POST -H "Content-Type: application/json" \
+          -d "{\"content\": \"⚠️ Provenance height stuck at $H1 for >30s on $(hostname)\"}" \
+          "$WEBHOOK" || true
+      fi
+
+  - path: /etc/cron.d/provenance-watchdog
+    permissions: '0644'
+    content: |
+      */1 * * * * root /usr/local/bin/check-height.sh
+
+  # ---------- ufw default-deny ---------------------------------------------
+  - path: /etc/ufw/applications.d/provenance
+    permissions: '0644'
+    content: |
+      [Provenance-RPC]
+      title=HTTPS RPC via Caddy
+      description=Caddy fronts the rollup RPC and provides Let's Encrypt TLS.
+      ports=80,443/tcp
+
+      [Tendermint-P2P]
+      title=Tendermint P2P
+      description=Peer-to-peer networking for the rollup
+      ports=26656/tcp
+
+users:
+  - name: initia
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    shell: /bin/bash
+    create_home: true
+    lock_passwd: true
+
+runcmd:
+  # ---- system hardening ----
+  - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+  - ufw --force reset
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow Provenance-RPC
+  - ufw allow Tendermint-P2P
+  - ufw --force enable
+
+  # ---- install Caddy ----
+  - curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  - curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+  - apt-get update
+  - apt-get install -y caddy
+  - mkdir -p /var/log/caddy
+  - chown -R caddy:caddy /var/log/caddy
+  - systemctl enable --now caddy
+
+  # ---- install minitiad + opinitd via official binaries ----
+  # Versions pinned in TECH_STACK.md; bumping requires a same-PR doc update.
+  - curl -L https://github.com/initia-labs/minimove/releases/download/v0.6.5/minitiad_v0.6.5_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin
+  - curl -L https://github.com/initia-labs/opinit-bots/releases/download/v0.2.4/opinitd_v0.2.4_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin
+  - chmod +x /usr/local/bin/minitiad /usr/local/bin/opinitd
+
+  # ---- chain init via weave (idempotent: no-op if already initialised) ----
+  - su - initia -c 'mkdir -p ~/.minitia ~/.opinit ~/.opinit-challenger'
+  - su - initia -c 'base64 -d < ~/weave-init-payload.b64 | tar -xz -C ~/'
+  - shred -u /home/initia/weave-init-payload.b64
+
+  # ---- install Vector for log/metric shipping ----
+  - bash -c "$(curl -L https://setup.vector.dev)"
+  - apt-get install -y vector
+  - systemctl enable --now vector
+
+  # ---- start the chain stack ----
+  - systemctl daemon-reload
+  - systemctl enable --now minitiad
+  - sleep 10  # give minitiad a head start
+  - systemctl enable --now opinit-executor
+  - systemctl enable --now opinit-challenger
+
+  - echo "✓ provenance rollup bootstrap complete"

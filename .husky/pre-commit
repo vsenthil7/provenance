@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# 1. format / lint staged files
+pnpm exec lint-staged
+
+# 2. block secret leaks
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --config .gitleaks.toml
+else
+  echo "warn: gitleaks not installed locally; CI will still enforce."
+fi

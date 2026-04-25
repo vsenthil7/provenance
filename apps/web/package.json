@@ -1,0 +1,53 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint --max-warnings 0",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "coverage-gate": "node scripts/coverage-gate.mjs",
+    "playwright": "playwright test"
+  },
+  "dependencies": {
+    "@initia/interwovenkit-react": "^2.4.0",
+    "@tanstack/react-query": "^5.59.0",
+    "@aws-sdk/client-s3": "^3.670.0",
+    "@aws-sdk/s3-request-presigner": "^3.670.0",
+    "next": "15.0.3",
+    "react": "19.0.0-rc",
+    "react-dom": "19.0.0-rc",
+    "sonner": "^1.5.0",
+    "viem": "^2.21.0",
+    "wagmi": "^2.13.0",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.7.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.13.0",
+    "eslint-config-next": "15.0.3",
+    "happy-dom": "^15.7.0",
+    "msw": "^2.4.0",
+    "postcss": "^8.4.47",
+    "prettier": "^3.3.3",
+    "supertest": "^7.0.0",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

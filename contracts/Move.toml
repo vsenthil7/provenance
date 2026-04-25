@@ -1,0 +1,35 @@
+[package]
+name = "Provenance"
+version = "0.1.0"
+authors = ["Provenance contributors"]
+license = "MIT"
+
+[addresses]
+provenance = "_"
+std        = "0x1"
+aptos_std  = "0x1"
+aptos_framework = "0x1"
+minitia_std = "0x1"
+
+[dev-addresses]
+provenance = "0xCAFE"
+
+[dependencies.MoveStdlib]
+git = "https://github.com/aptos-labs/aptos-core.git"
+subdir = "aptos-move/framework/move-stdlib"
+rev = "mainnet"
+
+[dependencies.AptosStdlib]
+git = "https://github.com/aptos-labs/aptos-core.git"
+subdir = "aptos-move/framework/aptos-stdlib"
+rev = "mainnet"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+subdir = "aptos-move/framework/aptos-framework"
+rev = "mainnet"
+
+[dependencies.MinitiaStdlib]
+git = "https://github.com/initia-labs/movevm.git"
+subdir = "precompile/modules/minitia_stdlib"
+rev = "main"

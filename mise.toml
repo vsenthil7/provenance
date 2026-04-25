@@ -1,0 +1,17 @@
+# Pinned toolchain — Provenance
+# `mise install` to provision; `mise current` to verify.
+
+[tools]
+node    = "20.18.1"        # LTS
+pnpm    = "9.12.3"
+just    = "1.36.0"
+"aqua:aptos-labs/aptos-core" = "3.5.0"   # aptos CLI; Move toolchain
+terraform = "1.9.8"
+go      = "1.22.10"        # for minitiad if building from source on dev box
+
+[env]
+NEXT_TELEMETRY_DISABLED = "1"
+PNPM_HOME = "{{config_root}}/.pnpm"
+
+[settings]
+experimental = true

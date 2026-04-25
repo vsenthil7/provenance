@@ -1,0 +1,187 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20.18.1"
+  PNPM_VERSION: "9.12.3"
+  APTOS_CLI_VERSION: "3.5.0"
+
+jobs:
+  # ----------------------------------------------------------
+  # Job 1: lint, typecheck, build (fast feedback, fan-out)
+  # ----------------------------------------------------------
+  lint-and-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm -r lint
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+  # ----------------------------------------------------------
+  # Job 2: Move modules — compile, test, 100% coverage gate
+  # ----------------------------------------------------------
+  move:
+    name: Move (compile + test + 100% coverage)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install aptos CLI
+        run: |
+          curl -LO "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v${APTOS_CLI_VERSION}/aptos-cli-${APTOS_CLI_VERSION}-Linux-x86_64.zip"
+          unzip "aptos-cli-${APTOS_CLI_VERSION}-Linux-x86_64.zip"
+          sudo mv aptos /usr/local/bin/
+          aptos --version
+      - name: Compile Move package
+        working-directory: contracts
+        run: aptos move compile --skip-fetch-latest-git-deps
+      - name: Run Move tests with coverage
+        working-directory: contracts
+        run: aptos move test --coverage
+      - name: Enforce 100% Move coverage
+        working-directory: contracts
+        run: |
+          aptos move coverage summary | tee coverage-summary.txt
+          # Fail if any module is below 100%. The summary line format is
+          # "Module XXXX_YY: 100.00%". Anything else is a regression.
+          if grep -E "^\| .+ \| ([0-9]|[1-9][0-9])\.[0-9]+ %" coverage-summary.txt; then
+            echo "::error::Move coverage below 100% — see summary above"
+            exit 1
+          fi
+          if ! grep -qE "100\.00 %" coverage-summary.txt; then
+            echo "::error::Move coverage summary did not report 100%"
+            exit 1
+          fi
+
+  # ----------------------------------------------------------
+  # Job 3: web — unit + integration + 100% gate
+  # ----------------------------------------------------------
+  web-unit:
+    name: Web (unit + integration + 100% coverage)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Test with coverage
+        run: pnpm --filter web test:coverage
+      - name: Enforce 100% web coverage
+        run: pnpm --filter web coverage-gate
+
+  # ----------------------------------------------------------
+  # Job 4: indexer — unit + 100% gate
+  # ----------------------------------------------------------
+  indexer-unit:
+    name: Indexer (unit + 100% coverage)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Test with coverage
+        run: pnpm --filter indexer test:coverage
+      - name: Enforce 100% indexer coverage
+        run: pnpm --filter indexer coverage-gate
+
+  # ----------------------------------------------------------
+  # Job 5: Playwright e2e — five user journeys
+  # ----------------------------------------------------------
+  e2e:
+    name: Playwright (5 user journeys)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    needs: [web-unit, indexer-unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Run all five journey specs
+        run: pnpm --filter web exec playwright test
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+
+  # ----------------------------------------------------------
+  # Job 6: gitleaks — block leaked secrets
+  # ----------------------------------------------------------
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ----------------------------------------------------------
+  # Aggregate gate — must be green for branch protection
+  # ----------------------------------------------------------
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-22.04
+    needs: [lint-and-typecheck, move, web-unit, indexer-unit, e2e, gitleaks]
+    if: always()
+    steps:
+      - name: Verify every required job is green
+        run: |
+          if [[ "${{ needs.lint-and-typecheck.result }}" != "success" || \
+                "${{ needs.move.result }}" != "success" || \
+                "${{ needs.web-unit.result }}" != "success" || \
+                "${{ needs.indexer-unit.result }}" != "success" || \
+                "${{ needs.e2e.result }}" != "success" || \
+                "${{ needs.gitleaks.result }}" != "success" ]]; then
+            echo "::error::one or more required jobs failed; see above"
+            exit 1
+          fi
+          echo "✓ all required jobs green"
