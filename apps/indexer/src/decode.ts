@@ -129,11 +129,29 @@ function attrs(e: RawEvent): Record<string, string> {
 }
 
 function decode(s: string): string {
-  try {
-    if (/^[A-Za-z0-9+/=]+$/.test(s) && s.length % 4 === 0) {
-      return Buffer.from(s, 'base64').toString('utf8');
-    }
-  } catch { /* fall through */ }
+  // Plain numeric strings are never base64-encoded payloads — they are uint
+  // attribute values emitted by Move events. Short-circuiting here prevents
+  // strings like '5000' (length divisible by 4, all base64-alphabet chars)
+  // from being garbled into binary by Buffer.from(s, 'base64').
+  if (/^\d+$/.test(s)) return s;
+  // Heuristic for base64: A-Z, a-z, 0-9, +, /, optional '=' padding, length % 4 === 0,
+  // and the round-tripped decode→encode reproduces the input exactly. This rejects
+  // strings that happen to use base64 alphabet but aren't valid base64 payloads.
+  if (s.length > 0 && s.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(s)) {
+    try {
+      const buf = Buffer.from(s, 'base64');
+      const reencoded = buf.toString('base64');
+      // strict round-trip check: only accept if encode(decode(s)) === s exactly
+      if (reencoded === s) {
+        const utf8 = buf.toString('utf8');
+        // additionally require the decoded UTF-8 to not contain replacement chars
+        // (U+FFFD) which Node emits when encountering invalid UTF-8 sequences.
+        if (!utf8.includes('\uFFFD')) {
+          return utf8;
+        }
+      }
+    } catch { /* fall through */ }
+  }
   return s;
 }
 
