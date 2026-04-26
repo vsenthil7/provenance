@@ -132,4 +132,29 @@ module provenance::royalty_tests {
         assert!(coin::balance<AptosCoin>(signer::address_of(artist)) == 995_000, 0);
         test_utils::cleanup_caps(b, m);
     }
+
+    // --- error path: zero gross ---
+    // Reachable: hand settle a payment coin of value 0.
+    // settle_for_test exposes the friend-only path.
+
+    #[test(fw=@0x1, dep=@provenance, artist=@0xA, buyer=@0xB)]
+    #[expected_failure(abort_code = 0x10002, location = provenance::royalty)]
+    fun settle_rejects_zero_gross(fw: &signer, dep: &signer, artist: &signer, buyer: &signer) {
+        let (b, m) = test_utils::setup(fw, dep);
+        test_utils::fund(signer::address_of(artist), 0, &m);
+        test_utils::fund(signer::address_of(buyer), 0, &m);
+        test_utils::fund(test_utils::treasury_addr(), 0, &m);
+
+        let (_col, art) = test_utils::mint_artwork_for(artist, 500);
+        let zero_payment = test_utils::mint_coin(0, &m);
+        royalty::settle_for_test(
+            signer::address_of(buyer),
+            signer::address_of(artist),
+            art,
+            zero_payment,
+            1,
+            0,
+        );
+        test_utils::cleanup_caps(b, m);
+    }
 }

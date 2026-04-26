@@ -151,6 +151,21 @@ module provenance::collection {
         borrow_global<Collection>(object::object_address(&collection_obj)).frozen
     }
 
+    #[view]
+    public fun metadata_uri_of(collection_obj: Object<Collection>): String acquires Collection {
+        borrow_global<Collection>(object::object_address(&collection_obj)).metadata_uri
+    }
+
+    #[view]
+    public fun supply_cap_of(collection_obj: Object<Collection>): Option<u64> acquires Collection {
+        borrow_global<Collection>(object::object_address(&collection_obj)).supply_cap
+    }
+
+    #[view]
+    public fun minted_of(collection_obj: Object<Collection>): u64 acquires Collection {
+        borrow_global<Collection>(object::object_address(&collection_obj)).minted
+    }
+
     // ---- test-only ----
 
     #[test_only]
@@ -160,7 +175,30 @@ module provenance::collection {
         artist: &signer,
         default_royalty_bps: u64,
     ): Object<Collection> {
+        create_collection_with_options_for_test(
+            artist,
+            default_royalty_bps,
+            std::string::utf8(b"Test Collection"),
+            std::string::utf8(b"TEST"),
+            option::none<u64>(),
+            std::string::utf8(b"https://r2.example/col.json"),
+            false,
+        )
+    }
+
+    #[test_only]
+    /// Full-control test constructor — exposes mutable_metadata + supply_cap.
+    public fun create_collection_with_options_for_test(
+        artist: &signer,
+        default_royalty_bps: u64,
+        name: String,
+        symbol: String,
+        supply_cap: Option<u64>,
+        metadata_uri: String,
+        mutable_metadata: bool,
+    ): Object<Collection> {
         assert!(default_royalty_bps <= MAX_ROYALTY_BPS, error::invalid_argument(E_ROYALTY_BPS_TOO_HIGH));
+        assert!(std::string::length(&symbol) <= MAX_SYMBOL_LEN, error::invalid_argument(E_SYMBOL_TOO_LONG));
         let artist_addr = signer::address_of(artist);
         let id = provenance::counters::next_collection_id();
 
@@ -170,14 +208,14 @@ module provenance::collection {
 
         let collection = Collection {
             id,
-            name: std::string::utf8(b"Test Collection"),
-            symbol: std::string::utf8(b"TEST"),
+            name,
+            symbol,
             artist_addr,
             default_royalty_bps,
-            supply_cap: option::none<u64>(),
+            supply_cap,
             minted: 0,
-            metadata_uri: std::string::utf8(b"https://r2.example/col.json"),
-            mutable_metadata: false,
+            metadata_uri,
+            mutable_metadata,
             created_at: aptos_framework::timestamp::now_seconds(),
             frozen: false,
             extend_ref,
@@ -185,11 +223,7 @@ module provenance::collection {
         move_to(&object_signer, collection);
 
         event::emit(CollectionCreatedEvent {
-            id, artist_addr,
-            name: std::string::utf8(b"Test Collection"),
-            symbol: std::string::utf8(b"TEST"),
-            default_royalty_bps,
-            supply_cap: option::none<u64>(),
+            id, artist_addr, name, symbol, default_royalty_bps, supply_cap,
         });
         // Build the typed handle AFTER move_to. Modern aptos-framework's
         // object_from_constructor_ref strictly checks that the resource exists.

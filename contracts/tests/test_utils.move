@@ -3,11 +3,13 @@ module provenance::test_utils {
     use std::signer;
     use std::string::{Self, String};
     use std::vector;
+    use std::option;
     use aptos_framework::account;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::coin::{Self, Coin, BurnCapability, MintCapability};
-    use aptos_framework::object::Object;
+    use aptos_framework::object::{Self, Object};
     use aptos_framework::timestamp;
+    use aptos_framework::event;
 
     use provenance::counters;
     use provenance::collection::{Self, Collection};
@@ -69,6 +71,23 @@ module provenance::test_utils {
         v
     }
 
+    /// Build a string that exceeds artwork::MAX_TITLE_LEN (256). Used to
+    /// trigger the E_TITLE_TOO_LONG branch.
+    public fun too_long_title(): String {
+        let v = vector::empty<u8>();
+        let i = 0;
+        while (i < 257) {
+            vector::push_back(&mut v, 65u8); // 'A'
+            i = i + 1;
+        };
+        string::utf8(v)
+    }
+
+    /// Build a symbol string that exceeds collection::MAX_SYMBOL_LEN (8).
+    public fun too_long_symbol(): String {
+        string::utf8(b"NINELONG9")
+    }
+
     /// Create a collection + an artwork in one call.
     public fun mint_artwork_for(
         artist: &signer, royalty_bps: u64,
@@ -76,6 +95,33 @@ module provenance::test_utils {
         let col = collection::create_collection_for_test(artist, royalty_bps);
         let art = artwork::mint_for_test(artist, col, string::utf8(b"Untitled"), valid_hash());
         (col, art)
+    }
+
+    /// Create a collection where mutable_metadata = true. Used by tests that
+    /// exercise set_metadata_uri.
+    public fun mutable_collection(artist: &signer): Object<Collection> {
+        collection::create_collection_with_options_for_test(
+            artist,
+            500,
+            string::utf8(b"Mutable Collection"),
+            string::utf8(b"MUT"),
+            option::none<u64>(),
+            string::utf8(b"https://r2.example/v1.json"),
+            true, // mutable_metadata
+        )
+    }
+
+    /// Create a collection with a supply cap. Used by tests that exhaust supply.
+    public fun capped_collection(artist: &signer, cap: u64): Object<Collection> {
+        collection::create_collection_with_options_for_test(
+            artist,
+            500,
+            string::utf8(b"Capped Collection"),
+            string::utf8(b"CAP"),
+            option::some(cap),
+            string::utf8(b"https://r2.example/cap.json"),
+            false,
+        )
     }
 
     public fun cleanup_caps(burn: BurnCapability<AptosCoin>, mint: MintCapability<AptosCoin>) {
@@ -91,5 +137,12 @@ module provenance::test_utils {
     public fun forward_secs(secs: u64) {
         let now = timestamp::now_seconds();
         timestamp::update_global_time_for_test_secs(now + secs);
+    }
+
+    // Touch event::emitted_events so the unused-import warning under #[test_only]
+    // is suppressed when callers don't yet read events.
+    #[test_only]
+    public fun event_count<T: drop + store>(): u64 {
+        (vector::length(&event::emitted_events<T>()) as u64)
     }
 }
