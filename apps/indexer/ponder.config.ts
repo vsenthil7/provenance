@@ -14,8 +14,7 @@ export default createConfig({
     kind: 'postgres',
     connectionString: process.env.DATABASE_URL,
   },
-  // Stub the chains block so Ponder boots; our actual sync happens in
+  // Stub the networks block so Ponder boots; our actual sync happens in
   // src/index.ts via a custom polling loop.
-  chains: {},
-  contracts: {},
+  networks: {},
 });

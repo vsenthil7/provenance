@@ -8,6 +8,7 @@
  * in test/fakes.ts.
  */
 
+import { Pool } from 'pg';
 import type { DbWriter, BlockContext } from './sync';
 import type { MoveEvent } from './decode';
 
@@ -223,13 +224,10 @@ export async function makeDbWriter(): Promise<DbWriter> {
   // require DATABASE_URL and let the build catch the absence at deploy time.
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set');
-  // Pool import is intentionally dynamic so unit tests that don't touch the
-  // network can run without `pg` installed.
-  const { Pool } = await import('pg');
-  const pool = new (Pool as any)({ connectionString: url });
+  const pool = new Pool({ connectionString: url });
   const sql: SqlClient = {
     exec: async (q, p) => { await pool.query(q, p ?? []); },
-    query: async (q, p) => (await pool.query(q, p ?? [])).rows,
+    query: async (q, p) => (await pool.query(q, p ?? [])).rows as never[],
   };
   return new PgWriter(sql);
 }

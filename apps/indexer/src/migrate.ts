@@ -5,13 +5,13 @@
 
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import { Pool } from 'pg';
 
 const MIGRATIONS_DIR = resolve(process.cwd(), 'migrations');
 
 export async function runMigrations(databaseUrl: string = process.env.DATABASE_URL ?? ''): Promise<{ applied: string[] }> {
   if (!databaseUrl) throw new Error('DATABASE_URL is not set');
-  const { Pool } = await import('pg');
-  const pool = new (Pool as any)({ connectionString: databaseUrl });
+  const pool = new Pool({ connectionString: databaseUrl });
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS _migrations (
