@@ -73,3 +73,7 @@ crash.log
 contracts/.coverage_map.mvcov
 contracts/build/
 
+
+# Move coverage scratch files
+contracts/.cov_*.txt
+
