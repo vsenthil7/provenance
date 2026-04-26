@@ -57,4 +57,19 @@ describe('<LiveDropsGrid />', () => {
     await waitFor(() => expect(screen.getByText('Test')).toBeInTheDocument());
     expect(screen.getByText('5 INIT')).toBeInTheDocument();
   });
+
+  // Cover line 30: the `json?.data?.liveDrops ?? []` fallback. When the
+  // upstream returns a payload missing the `data` field entirely, the
+  // fetcher must return an empty array rather than throw.
+  it('treats a malformed payload (no data field) as empty', async () => {
+    server.use(
+      http.post('*/api/graphql', () =>
+        HttpResponse.json({}), // no `data` key at all
+      ),
+    );
+    render(<LiveDropsGrid />, { wrapper: wrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('drops-empty')).toBeInTheDocument(),
+    );
+  });
 });

@@ -215,4 +215,31 @@ describe('toBase64 paths', () => {
   it('toBase64Browser handles empty input', () => {
     expect(toBase64Browser(new Uint8Array(0))).toBe('');
   });
+
+  // Cover the dispatcher's *false* branch: when Buffer is undefined, the
+  // dispatcher must fall through to toBase64Browser. We swap globalThis.Buffer
+  // out for the duration of one call; we cannot use `delete` because Node's
+  // `Buffer` is non-configurable, but a reassignment-then-restore works.
+  it('toBase64 falls back to the browser path when Buffer is undefined', () => {
+    const realBuffer = (globalThis as { Buffer?: typeof Buffer }).Buffer;
+    const realBtoa = (globalThis as { btoa?: (s: string) => string }).btoa;
+    // Capture before we shadow so the fake btoa can still encode.
+    const encode = (s: string) => {
+      if (!realBuffer) return '';
+      return realBuffer.from(s, 'binary').toString('base64');
+    };
+    (globalThis as { Buffer?: unknown }).Buffer = undefined;
+    (globalThis as { btoa?: (s: string) => string }).btoa = encode;
+    try {
+      const out = toBase64(new Uint8Array([1, 2, 3]));
+      // Equal to the value of the Node path applied to the same bytes
+      const expected = realBuffer
+        ? realBuffer.from(new Uint8Array([1, 2, 3])).toString('base64')
+        : 'AQID';
+      expect(out).toBe(expected);
+    } finally {
+      (globalThis as { Buffer?: unknown }).Buffer = realBuffer;
+      (globalThis as { btoa?: (s: string) => string }).btoa = realBtoa;
+    }
+  });
 });

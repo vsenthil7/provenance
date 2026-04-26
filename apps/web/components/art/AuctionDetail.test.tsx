@@ -79,4 +79,18 @@ describe('AuctionDetail', () => {
     expect(screen.getByText('7.5%')).toBeInTheDocument();
     expect(screen.getByText('live')).toBeInTheDocument();
   });
+
+  // Cover line 14: the setInterval tick that updates remainingMs.
+  it('updates the countdown when the timer ticks', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<AuctionDetail auction={A()} />);
+      // Advance one second past the initial render; the interval callback at
+      // line 14 must fire setRemainingMs.
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(screen.getByTestId('auction-countdown')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

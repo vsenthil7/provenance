@@ -64,4 +64,11 @@ describe('POST /api/presign', () => {
     );
     expect(res.status).toBe(502);
   });
+
+  it('400 on null body (?? branch coverage)', async () => {
+    const res = await POST(makeReq(null));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('missing fields');
+  });
 });

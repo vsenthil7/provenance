@@ -123,4 +123,21 @@ describe('<BuyPanel />', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(sonner.toast.error).toHaveBeenCalled();
   });
+
+  // Cover BuyPanel.tsx:45 — the (e instanceof Error ? e.message : ...) false
+  // branch. requestTxBlock can in theory reject with a non-Error value (e.g.
+  // a string from a misbehaving wallet provider); the panel must not throw.
+  it('toasts a generic message when buy rejects with a non-Error', async () => {
+    const { fetchInitBalance } = await import('@/lib/chain/balance');
+    (fetchInitBalance as any).mockResolvedValue(10_000_000n);
+    requestTxBlock.mockRejectedValueOnce('plain string rejection');
+    const sonner = await import('sonner');
+    (sonner.toast.error as any).mockClear?.();
+    kitState = { initiaAddress: 'init1c', openConnect, requestTxBlock };
+    wrap(<BuyPanel listing={listing} />);
+    const buyBtn = await screen.findByRole('button', { name: /buy for/i });
+    buyBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sonner.toast.error).toHaveBeenCalledWith('Purchase failed.');
+  });
 });

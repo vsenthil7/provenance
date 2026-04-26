@@ -74,4 +74,12 @@ describe('POST /api/finalize', () => {
     const res = await POST(makeReq({ contentType: 'image/png', contentHash: validHash }));
     expect(res.status).toBe(404);
   });
+
+  it('400 on null body (?? branch coverage)', async () => {
+    send.mockResolvedValue({ ContentLength: 1234 });
+    const res = await POST(makeReq(null));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('missing fields');
+  });
 });

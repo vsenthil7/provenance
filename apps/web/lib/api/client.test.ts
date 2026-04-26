@@ -61,4 +61,55 @@ describe('gql client', () => {
     expect(e.name).toBe('GraphQLError');
     expect(e.errors).toEqual({ foo: 1 });
   });
+
+  // Covers the env-var truthy branch of the ENDPOINT initialiser at module
+  // load (line 8 in client.ts) AND the typeof window === 'undefined' true
+  // branch. The default test runs under jsdom (window is defined) so the
+  // SSR path is normally unreachable; we shadow window for one re-import.
+  it('uses INDEXER_GRAPHQL_URL when set on the SSR path (env-truthy branch)', async () => {
+    const realWindow = (globalThis as { window?: unknown }).window;
+    const prev = process.env.INDEXER_GRAPHQL_URL;
+    process.env.INDEXER_GRAPHQL_URL = 'http://override.test/graphql';
+    // Pretend we're on the server: typeof window === 'undefined' must be true.
+    (globalThis as { window?: unknown }).window = undefined;
+    try {
+      vi.resetModules();
+      const { gql: gql2 } = await import('./client');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { ok: true } }),
+      });
+      await gql2('query {}');
+      const url = mockFetch.mock.calls[mockFetch.mock.calls.length - 1][0];
+      expect(url).toBe('http://override.test/graphql');
+    } finally {
+      if (prev === undefined) delete process.env.INDEXER_GRAPHQL_URL;
+      else process.env.INDEXER_GRAPHQL_URL = prev;
+      (globalThis as { window?: unknown }).window = realWindow;
+      vi.resetModules();
+    }
+  });
+
+  // Covers the SSR fallback branch (env unset, server-side).
+  it('falls back to localhost on the SSR path when INDEXER_GRAPHQL_URL is unset', async () => {
+    const realWindow = (globalThis as { window?: unknown }).window;
+    const prev = process.env.INDEXER_GRAPHQL_URL;
+    delete process.env.INDEXER_GRAPHQL_URL;
+    (globalThis as { window?: unknown }).window = undefined;
+    try {
+      vi.resetModules();
+      const { gql: gql2 } = await import('./client');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { ok: true } }),
+      });
+      await gql2('query {}');
+      const url = mockFetch.mock.calls[mockFetch.mock.calls.length - 1][0];
+      expect(url).toBe('http://localhost:42069/graphql');
+    } finally {
+      if (prev !== undefined) process.env.INDEXER_GRAPHQL_URL = prev;
+      (globalThis as { window?: unknown }).window = realWindow;
+      vi.resetModules();
+    }
+  });
 });
