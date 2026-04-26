@@ -9,24 +9,27 @@ provenance = "_"
 std        = "0x1"
 aptos_std  = "0x1"
 aptos_framework = "0x1"
+minitia_std = "0x1"
 
 [dev-addresses]
-provenance = "0xC0FFEE"
+provenance = "0xCAFE"
 
-# NOTE on framework choice and pinned rev:
-#
-# The Move source modules use `Coin<AptosCoin>` directly as a `public entry`
-# parameter (e.g. `place_bid(... bid: Coin<AptosCoin>)`). Recent aptos-core
-# revisions reject this with "type Coin<T> is not supported as a transaction
-# parameter type" — modern Aptos requires entry signatures to take `u64`
-# amounts and pull the Coin from primary_fungible_store inside the function.
-#
-# Refactoring to that pattern is a Phase 2.5 follow-up (tracked in BUILD_PLAN
-# under "Initia FA port"). For Phase 2 unit tests + coverage we pin to
-# aptos-release-v1.6, the last release branch where `Coin<T>` entry
-# parameters compiled cleanly. This keeps the 53 Move tests valid against
-# the source as written.
+[dependencies.MoveStdlib]
+git = "https://github.com/aptos-labs/aptos-core.git"
+subdir = "aptos-move/framework/move-stdlib"
+rev = "mainnet"
+
+[dependencies.AptosStdlib]
+git = "https://github.com/aptos-labs/aptos-core.git"
+subdir = "aptos-move/framework/aptos-stdlib"
+rev = "mainnet"
+
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"
 subdir = "aptos-move/framework/aptos-framework"
-rev = "aptos-node-v1.18"
+rev = "mainnet"
+
+[dependencies.MinitiaStdlib]
+git = "https://github.com/initia-labs/movevm.git"
+subdir = "precompile/modules/minitia_stdlib"
+rev = "main"
