@@ -167,7 +167,6 @@ module provenance::collection {
         let constructor_ref = object::create_object(artist_addr);
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let object_signer = object::generate_signer(&constructor_ref);
-        let obj = object::object_from_constructor_ref<Collection>(&constructor_ref);
 
         let collection = Collection {
             id,
@@ -192,6 +191,8 @@ module provenance::collection {
             default_royalty_bps,
             supply_cap: option::none<u64>(),
         });
-        obj
+        // Build the typed handle AFTER move_to. Modern aptos-framework's
+        // object_from_constructor_ref strictly checks that the resource exists.
+        object::object_from_constructor_ref<Collection>(&constructor_ref)
     }
 }

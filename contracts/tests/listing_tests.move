@@ -17,7 +17,7 @@ module provenance::listing_tests {
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let listing = market::list_fixed_for_test(artist, art, 1_000_000, 0);
         let payment = test_utils::mint_coin(1_000_000, &m);
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
         assert!(object::is_owner(art, signer::address_of(buyer)), 0);
         test_utils::cleanup_caps(b, m);
     }
@@ -46,7 +46,7 @@ module provenance::listing_tests {
         let listing = market::list_fixed_for_test(artist, art, 1_000_000, 0);
         market::cancel_listing(artist, listing);
         let payment = test_utils::mint_coin(1_000_000, &m);
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
         test_utils::cleanup_caps(b, m);
     }
 
@@ -61,7 +61,7 @@ module provenance::listing_tests {
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let listing = market::list_fixed_for_test(artist, art, 1_000_000, 0);
         let payment = test_utils::mint_coin(500_000, &m); // half the price
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
         test_utils::cleanup_caps(b, m);
     }
 
@@ -101,7 +101,7 @@ module provenance::listing_tests {
 
         // Pay 1.5 INIT, expect 0.5 INIT refund.
         let payment = test_utils::mint_coin(1_500_000, &m);
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
         // The buyer was funded with 0 then the surplus (500_000) was deposited.
         assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) == 500_000, 0);
         test_utils::cleanup_caps(b, m);
@@ -122,7 +122,7 @@ module provenance::listing_tests {
         provenance::artwork::gift(artist, art, signer::address_of(recipient));
         // Buy attempt fails with E_LISTING_STALE
         let payment = test_utils::mint_coin(1_000_000, &m);
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
         test_utils::cleanup_caps(b, m);
     }
 }

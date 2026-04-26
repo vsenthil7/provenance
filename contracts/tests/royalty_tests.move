@@ -77,7 +77,7 @@ module provenance::royalty_tests {
         let listing = market::list_fixed_for_test(artist, art, 1_000_000, 0);
 
         let payment = test_utils::mint_coin(1_000_000, &m);
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
 
         // Artist received 5% royalty (50_000) + the 1M as seller (since artist
         // is also seller for first sale): 50_000 royalty + (1_000_000 - 50_000 - 5_000) net = 945_000.
@@ -103,7 +103,7 @@ module provenance::royalty_tests {
         let listing = market::list_fixed_for_test(artist, art, 1_000_000, 0);
 
         let payment = test_utils::mint_coin(1_000_000, &m);
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
 
         // 0 royalty + 5_000 fee + 995_000 net (all to artist as seller) = 995_000
         assert!(coin::balance<AptosCoin>(artist_addr) == 995_000, 0);
@@ -126,7 +126,7 @@ module provenance::royalty_tests {
         let (_col, art) = test_utils::mint_artwork_for(artist, 1000); // max 10%
         let listing = market::list_fixed_for_test(artist, art, 1_000_000, 0);
         let payment = test_utils::mint_coin(1_000_000, &m);
-        market::buy_now(buyer, listing, payment);
+        market::buy_now_with_coin(buyer, listing, payment);
 
         // 100_000 royalty + 5_000 fee + 895_000 net all to artist (first sale)
         assert!(coin::balance<AptosCoin>(signer::address_of(artist)) == 995_000, 0);

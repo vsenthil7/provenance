@@ -9,27 +9,22 @@ provenance = "_"
 std        = "0x1"
 aptos_std  = "0x1"
 aptos_framework = "0x1"
-minitia_std = "0x1"
 
 [dev-addresses]
 provenance = "0xCAFE"
 
-[dependencies.MoveStdlib]
-git = "https://github.com/aptos-labs/aptos-core.git"
-subdir = "aptos-move/framework/move-stdlib"
-rev = "mainnet"
-
-[dependencies.AptosStdlib]
-git = "https://github.com/aptos-labs/aptos-core.git"
-subdir = "aptos-move/framework/aptos-stdlib"
-rev = "mainnet"
+# Notes on dependency choices:
+# - We depend on AptosFramework only. It transitively re-exports MoveStdlib
+#   and AptosStdlib at the same address (0x1), so declaring them again here
+#   triggers a "Conflicting dependencies found: package 'MoveStdlib' conflicts
+#   with 'MoveStdlib'" error in the resolver.
+# - MinitiaStdlib is currently unused in the source modules (zero `minitia_std`
+#   usages across sources/ and tests/), so we omit it. If/when modules adopt
+#   minitia-specific primitives, add it back as a single dependency block and
+#   keep the AptosFramework block as the only path to MoveStdlib/AptosStdlib.
+# - rev = "mainnet" pins to the published mainnet Aptos framework branch.
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"
 subdir = "aptos-move/framework/aptos-framework"
 rev = "mainnet"
-
-[dependencies.MinitiaStdlib]
-git = "https://github.com/initia-labs/movevm.git"
-subdir = "precompile/modules/minitia_stdlib"
-rev = "main"

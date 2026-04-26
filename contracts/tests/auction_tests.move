@@ -32,7 +32,7 @@ module provenance::auction_tests {
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 600, 200, 120);
         let bid = test_utils::mint_coin(1_000_000, &m);
-        auction::place_bid(bidder, auc, bid);
+        auction::place_bid_with_coin(bidder, auc, bid);
         test_utils::cleanup_caps(b, m);
     }
 
@@ -46,7 +46,7 @@ module provenance::auction_tests {
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 600, 200, 120);
         let bid = test_utils::mint_coin(500_000, &m);
-        auction::place_bid(bidder, auc, bid);
+        auction::place_bid_with_coin(bidder, auc, bid);
         test_utils::cleanup_caps(b, m);
     }
 
@@ -59,9 +59,9 @@ module provenance::auction_tests {
         test_utils::fund(signer::address_of(b2), 0, &m);
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 600, 200, 120);
-        auction::place_bid(b1, auc, test_utils::mint_coin(1_000_000, &m));
+        auction::place_bid_with_coin(b1, auc, test_utils::mint_coin(1_000_000, &m));
         // Second bid must be at least 1_020_000 (1M + 2%).
-        auction::place_bid(b2, auc, test_utils::mint_coin(1_020_000, &m));
+        auction::place_bid_with_coin(b2, auc, test_utils::mint_coin(1_020_000, &m));
         test_utils::cleanup_caps(b, m);
     }
 
@@ -75,9 +75,9 @@ module provenance::auction_tests {
         test_utils::fund(signer::address_of(b2), 0, &m);
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 600, 200, 120);
-        auction::place_bid(b1, auc, test_utils::mint_coin(1_000_000, &m));
+        auction::place_bid_with_coin(b1, auc, test_utils::mint_coin(1_000_000, &m));
         // Increment is 2% → 1_020_000 required. 1_010_000 is too small.
-        auction::place_bid(b2, auc, test_utils::mint_coin(1_010_000, &m));
+        auction::place_bid_with_coin(b2, auc, test_utils::mint_coin(1_010_000, &m));
         test_utils::cleanup_caps(b, m);
     }
 
@@ -90,9 +90,9 @@ module provenance::auction_tests {
         test_utils::fund(signer::address_of(b2), 0, &m);
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 600, 200, 120);
-        auction::place_bid(b1, auc, test_utils::mint_coin(1_000_000, &m));
+        auction::place_bid_with_coin(b1, auc, test_utils::mint_coin(1_000_000, &m));
         // b1 now has 0; b1 is escrowed in the auction.
-        auction::place_bid(b2, auc, test_utils::mint_coin(1_020_000, &m));
+        auction::place_bid_with_coin(b2, auc, test_utils::mint_coin(1_020_000, &m));
         // After b2 outbids, b1 should be refunded.
         assert!(coin::balance<AptosCoin>(signer::address_of(b1)) == 1_000_000, 0);
         test_utils::cleanup_caps(b, m);
@@ -110,7 +110,7 @@ module provenance::auction_tests {
         // Advance to just before end (199s from now).
         test_utils::forward_secs(100); // now 100s remaining
         // 100 <= 120 → bid extends ends_at by 120 from now.
-        auction::place_bid(bidder, auc, test_utils::mint_coin(1_000_000, &m));
+        auction::place_bid_with_coin(bidder, auc, test_utils::mint_coin(1_000_000, &m));
         test_utils::cleanup_caps(b, m);
     }
 
@@ -124,7 +124,7 @@ module provenance::auction_tests {
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 60, 200, 30);
         test_utils::forward_secs(120); // past end
-        auction::place_bid(bidder, auc, test_utils::mint_coin(1_000_000, &m));
+        auction::place_bid_with_coin(bidder, auc, test_utils::mint_coin(1_000_000, &m));
         test_utils::cleanup_caps(b, m);
     }
 
@@ -149,7 +149,7 @@ module provenance::auction_tests {
         test_utils::fund(test_utils::treasury_addr(), 0, &m);
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 60, 200, 30);
-        auction::place_bid(bidder, auc, test_utils::mint_coin(1_000_000, &m));
+        auction::place_bid_with_coin(bidder, auc, test_utils::mint_coin(1_000_000, &m));
         test_utils::forward_secs(120);
         auction::finalize_auction(artist, auc);
         assert!(object::is_owner(art, signer::address_of(bidder)), 0);
@@ -181,7 +181,7 @@ module provenance::auction_tests {
         test_utils::fund(signer::address_of(bidder), 0, &m);
         let (_col, art) = test_utils::mint_artwork_for(artist, 500);
         let auc = auction::create_auction_for_test(artist, art, 1_000_000, 600, 200, 30);
-        auction::place_bid(bidder, auc, test_utils::mint_coin(1_000_000, &m));
+        auction::place_bid_with_coin(bidder, auc, test_utils::mint_coin(1_000_000, &m));
         // Don't advance time — auction still live.
         auction::finalize_auction(artist, auc);
         test_utils::cleanup_caps(b, m);

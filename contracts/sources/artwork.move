@@ -217,7 +217,6 @@ module provenance::artwork {
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let transfer_ref = object::generate_transfer_ref(&constructor_ref);
         let object_signer = object::generate_signer(&constructor_ref);
-        let obj = object::object_from_constructor_ref<Artwork>(&constructor_ref);
 
         let artwork = Artwork {
             id,
@@ -234,6 +233,9 @@ module provenance::artwork {
             transfer_ref,
         };
         move_to(&object_signer, artwork);
-        obj
+        // Modern aptos-framework's object_from_constructor_ref strictly checks
+        // that the resource exists at the address. Therefore build the typed
+        // handle AFTER move_to, not before.
+        object::object_from_constructor_ref<Artwork>(&constructor_ref)
     }
 }

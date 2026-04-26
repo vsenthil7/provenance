@@ -105,7 +105,16 @@ module provenance::market {
         event::emit(ListingCancelledEvent { id: listing.id });
     }
 
-    public entry fun buy_now(buyer: &signer, listing_obj: Object<Listing>, payment: Coin<AptosCoin>) acquires Listing {
+    /// Modern Aptos Move forbids `Coin<T>` as a transaction parameter. The
+    /// entry function therefore takes a `u64` amount and pulls the Coin from
+    /// the buyer's account internally. The `_with_coin` overload preserves the
+    /// original signature for use by tests and friend modules.
+    public entry fun buy_now(buyer: &signer, listing_obj: Object<Listing>, amount: u64) acquires Listing {
+        let payment = coin::withdraw<AptosCoin>(buyer, amount);
+        buy_now_with_coin(buyer, listing_obj, payment);
+    }
+
+    public fun buy_now_with_coin(buyer: &signer, listing_obj: Object<Listing>, payment: Coin<AptosCoin>) acquires Listing {
         let listing = borrow_global_mut<Listing>(object::object_address(&listing_obj));
         assert!(listing.active, error::invalid_state(E_LISTING_INACTIVE));
         if (listing.expires_at > 0) {
@@ -140,6 +149,17 @@ module provenance::market {
     // ----------------------- offers -----------------------
 
     public entry fun make_offer(
+        bidder: &signer,
+        artwork_obj: Object<Artwork>,
+        price_uinit: u64,
+        expires_at: u64,
+        amount: u64,
+    ) {
+        let escrow = coin::withdraw<AptosCoin>(bidder, amount);
+        make_offer_with_coin(bidder, artwork_obj, price_uinit, expires_at, escrow);
+    }
+
+    public fun make_offer_with_coin(
         bidder: &signer,
         artwork_obj: Object<Artwork>,
         price_uinit: u64,
@@ -208,7 +228,6 @@ module provenance::market {
         let constructor_ref = object::create_object(seller_addr);
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let object_signer = object::generate_signer(&constructor_ref);
-        let obj = object::object_from_constructor_ref<Listing>(&constructor_ref);
 
         move_to(&object_signer, Listing {
             id,
@@ -223,7 +242,8 @@ module provenance::market {
 
         let artwork_id = artwork::id_of(artwork_obj);
         event::emit(ListingCreatedEvent { id, artwork_id, seller: seller_addr, price_uinit, expires_at });
-        obj
+        // Build the typed handle AFTER move_to.
+        object::object_from_constructor_ref<Listing>(&constructor_ref)
     }
 
     #[test_only]
@@ -242,7 +262,6 @@ module provenance::market {
         let constructor_ref = object::create_object(bidder_addr);
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let object_signer = object::generate_signer(&constructor_ref);
-        let obj = object::object_from_constructor_ref<Offer>(&constructor_ref);
         let artwork_id = artwork::id_of(artwork_obj);
 
         move_to(&object_signer, Offer {
@@ -250,6 +269,7 @@ module provenance::market {
             price_uinit, expires_at, escrow, extend_ref,
         });
         event::emit(OfferCreatedEvent { id, artwork_id, bidder: bidder_addr, price_uinit, expires_at });
-        obj
+        // Build the typed handle AFTER move_to.
+        object::object_from_constructor_ref<Offer>(&constructor_ref)
     }
 }

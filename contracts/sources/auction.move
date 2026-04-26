@@ -10,7 +10,7 @@ module provenance::auction {
     use std::option::{Self, Option};
     use aptos_framework::coin::{Self, Coin};
     use aptos_framework::aptos_coin::AptosCoin;
-    use aptos_framework::object::{Self, Object, ExtendRef, TransferRef};
+    use aptos_framework::object::{Self, Object, ExtendRef};
     use aptos_framework::event;
     use aptos_framework::timestamp;
 
@@ -33,6 +33,18 @@ module provenance::auction {
     const MIN_INCREMENT_BPS_CEIL: u64  = 5000;    // 50%
     const MIN_DURATION_SECS: u64 = 60;            // 1 minute floor; demo-friendly
 
+    /// Auction state.
+    ///
+    /// `extend_ref` is the auction object's own ExtendRef — used to derive an
+    /// auction signer in `finalize_auction`'s no-bids branch so we can send the
+    /// custodied artwork back to the seller. (The auction holds the artwork in
+    /// custody between create and finalize; `object::transfer` requires the
+    /// current owner's signer, which is the auction signer here.)
+    ///
+    /// The winning branch goes through `royalty::settle`, which uses the
+    /// artwork's own friend-only TransferRef via `artwork::transfer_via_settle`
+    /// and bypasses the current-owner-signer requirement. That is the only
+    /// path in the protocol that moves an artwork in exchange for payment.
     struct Auction has key {
         id: u64,
         artwork: Object<Artwork>,
@@ -45,7 +57,6 @@ module provenance::auction {
         ends_at: u64,
         extension_secs: u64,
         finalized: bool,
-        artwork_transfer_ref: TransferRef,
         extend_ref: ExtendRef,
     }
 
@@ -88,8 +99,6 @@ module provenance::auction {
         let auction_addr = object::address_from_constructor_ref(&constructor_ref);
 
         // Move artwork into auction custody; seller no longer owns it until finalize.
-        // We retain a transfer ref so finalize can hand it to the winner (or back to seller).
-        let artwork_transfer_ref = object::generate_transfer_ref(&constructor_ref);
         object::transfer(seller, artwork_obj, auction_addr);
 
         let now = timestamp::now_seconds();
@@ -107,7 +116,6 @@ module provenance::auction {
             ends_at,
             extension_secs,
             finalized: false,
-            artwork_transfer_ref,
             extend_ref,
         });
 
@@ -118,7 +126,20 @@ module provenance::auction {
     }
 
     /// THE autosign target. Bid increments are bps-relative to current bid.
-    public entry fun place_bid(bidder: &signer, auction_obj: Object<Auction>, bid: Coin<AptosCoin>) acquires Auction {
+    ///
+    /// Modern Aptos Move forbids `Coin<T>` as a transaction parameter type.
+    /// Entry functions therefore take a `u64` amount and pull the Coin from
+    /// the bidder's account inside the function via `coin::withdraw`. The
+    /// internal helper `place_bid_with_coin` keeps the original semantics
+    /// (taking an already-withdrawn `Coin<AptosCoin>`) and is also the path
+    /// used by `#[test]` helpers, so existing tests in `tests/auction_tests.move`
+    /// continue to work without modification.
+    public entry fun place_bid(bidder: &signer, auction_obj: Object<Auction>, amount: u64) acquires Auction {
+        let bid = coin::withdraw<AptosCoin>(bidder, amount);
+        place_bid_with_coin(bidder, auction_obj, bid);
+    }
+
+    public fun place_bid_with_coin(bidder: &signer, auction_obj: Object<Auction>, bid: Coin<AptosCoin>) acquires Auction {
         let auction = borrow_global_mut<Auction>(object::object_address(&auction_obj));
         assert!(!auction.finalized, error::invalid_state(E_AUCTION_FINALIZED));
         let now = timestamp::now_seconds();
@@ -168,9 +189,11 @@ module provenance::auction {
         auction.finalized = true;
 
         if (option::is_none(&auction.current_bidder)) {
-            // No bids: return artwork to seller. No money to move.
-            let linear = object::generate_linear_transfer_ref(&auction.artwork_transfer_ref);
-            object::transfer_with_ref(linear, auction.seller);
+            // No bids: return artwork to seller. No money to move. Use the
+            // auction's ExtendRef to derive an auction signer; the auction is
+            // the current owner of the artwork so it must sign the transfer.
+            let auction_signer = object::generate_signer_for_extending(&auction.extend_ref);
+            object::transfer(&auction_signer, auction.artwork, auction.seller);
             event::emit(AuctionFinalizedEvent {
                 auction_id: auction.id,
                 winner_some: false,
@@ -184,6 +207,9 @@ module provenance::auction {
         let final_price = auction.current_bid_uinit;
         let escrow = coin::extract_all(&mut auction.current_escrow);
 
+        // royalty::settle uses the artwork's own friend-only TransferRef via
+        // artwork::transfer_via_settle, so it can move the artwork from the
+        // auction object to the buyer without needing the auction signer.
         royalty::settle(winner, auction.seller, auction.artwork, escrow, SOURCE_AUCTION, auction.id);
 
         event::emit(AuctionFinalizedEvent {
@@ -219,10 +245,8 @@ module provenance::auction {
         let constructor_ref = object::create_object(seller_addr);
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let object_signer = object::generate_signer(&constructor_ref);
-        let obj = object::object_from_constructor_ref<Auction>(&constructor_ref);
         let auction_addr = object::address_from_constructor_ref(&constructor_ref);
 
-        let artwork_transfer_ref = object::generate_transfer_ref(&constructor_ref);
         object::transfer(seller, artwork_obj, auction_addr);
 
         let now = timestamp::now_seconds();
@@ -234,7 +258,7 @@ module provenance::auction {
             current_bidder: option::none<address>(),
             current_escrow: coin::zero<AptosCoin>(),
             min_increment_bps, ends_at, extension_secs,
-            finalized: false, artwork_transfer_ref, extend_ref,
+            finalized: false, extend_ref,
         });
 
         let artwork_id = artwork::id_of(artwork_obj);
@@ -242,6 +266,8 @@ module provenance::auction {
             id, artwork_id, seller: seller_addr,
             reserve_uinit, ends_at, min_increment_bps, extension_secs,
         });
-        obj
+        // Build the typed handle AFTER move_to. Modern aptos-framework's
+        // object_from_constructor_ref strictly checks resource existence.
+        object::object_from_constructor_ref<Auction>(&constructor_ref)
     }
 }

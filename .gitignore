@@ -68,3 +68,8 @@ crash.log
 # TypeScript incremental build info
 *.tsbuildinfo
 
+
+# Move coverage cache
+contracts/.coverage_map.mvcov
+contracts/build/
+
