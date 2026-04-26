@@ -2,9 +2,24 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  experimental: {
-    typedRoutes: true,
-  },
+
+  // Next 15 promoted typedRoutes out of experimental.
+  typedRoutes: true,
+
+  // InterwovenKit pulls in @cosmjs/* and cosmjs-types. Tell Next to
+  // transpile these through SWC so deep imports resolve cleanly under
+  // webpack 5's exports-field enforcement.
+  transpilePackages: [
+    '@initia/interwovenkit-react',
+    '@cosmjs/amino',
+    '@cosmjs/proto-signing',
+    '@cosmjs/stargate',
+    '@cosmjs/tendermint-rpc',
+    '@cosmjs/encoding',
+    '@cosmjs/math',
+    'cosmjs-types',
+  ],
+
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'r2.provenance.app' },

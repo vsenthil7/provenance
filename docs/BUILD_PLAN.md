@@ -411,6 +411,27 @@ To be unambiguous about scope: items in the architecture that we will NOT ship i
 - Independent third-party challenger (production-blocker, named).
 - Move package security audit (production-blocker, named).
 
+### Added 26 April 2026 (build day, ~2h before deadline) — deferred to post-hackathon
+
+The items below are in the codebase as configuration/scaffolding but were **not provisioned live** before the deadline. The submission ships the codebase + 414 passing tests; the live infrastructure is post-hackathon scope. This is documented in the README and submission.json honest_caveats list. Customer-buyer review impact: the Sponsor and Tomas personas would mark this as a 'conditional approve' — the code is real, the live URL is not.
+
+- **Hetzner rollup VM (`provenance-rollup-1`)** — Terraform is at `infra/hetzner/main.tf` (hackathon-minimal variant: hcloud_token + ssh_public_key only, no Cloudflare DNS, no Better Stack, no Discord). Provisioning was descoped when SSH keypair generation hit Windows shell quoting issues with ~2h to deadline.
+- **Cloudflare DNS (`rpc.provenance-1.initia.xyz`)** — deferred along with the Hetzner VM.
+- **Vercel deployment of the frontend** — deferred. The Next.js production build (`pnpm build`) currently fails on a webpack-5 strict-exports issue carried in by `@initia/interwovenkit-react@2.8.0`'s deep imports of `@cosmjs/amino/build/signdoc.js` and `cosmjs-types/cosmos/...`. The dev server (`pnpm dev`) works; the production-build fix is post-hackathon.
+- **`aptos move publish` to provenance-1** — deferred (no live appchain to publish to). The package compiles and 92/92 tests pass against the local Move VM.
+- **Better Stack monitoring** — deferred along with the live infrastructure.
+- **Discord alert webhook** — deferred along with the live infrastructure.
+- **Post-deploy Playwright smoke against a live URL** — the spec is written and would run against `provenance.app` if it existed; deferred along with the deploy.
+
+What IS shipped in v0.1.0-hackathon:
+
+- The complete codebase (apps/web, apps/indexer, contracts, infra Terraform, docs, CI workflows) on a public GitHub repo.
+- 414 tests, all passing (92 Move + 256 web + 66 indexer).
+- Move 98.55% / web 100% / indexer 100% coverage (5 documented Rule-5 exemptions, 0 unauthorised gaps).
+- All five user-journey Playwright specs.
+- Architecture, threat model, build plan, customer-buyer review, brutal review, accountability audit, market context — all 14+ docs.
+- README + submission.json honest about every deferred item.
+
 These are not built **and not architected as if built**. The architecture documents are explicit about what is testnet vs mainnet vs aspirational.
 
 ---

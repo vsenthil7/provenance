@@ -11,30 +11,30 @@
   "team": {
     "name": "Provenance",
     "members": [
-      { "role": "builder", "github": "REPLACE", "x": "REPLACE", "discord": "REPLACE" }
+      { "role": "builder", "github": "vsenthil7", "x": null, "discord": null }
     ]
   },
   "links": {
-    "repo": "https://github.com/REPLACE/provenance",
-    "live_app": "https://provenance.app",
-    "rpc": "https://rpc.provenance-1.initia.xyz",
-    "demo_video": "REPLACE-youtube-unlisted-url",
-    "initiascan": "https://scan.testnet.initia.xyz/provenance-1",
-    "architecture_doc": "https://github.com/REPLACE/provenance/blob/main/docs/ARCHITECTURE.md",
-    "initia_integration_doc": "https://github.com/REPLACE/provenance/blob/main/docs/INITIA_INTEGRATION.md"
+    "repo": "https://github.com/vsenthil7/provenance",
+    "live_app": null,
+    "rpc": null,
+    "demo_video": null,
+    "initiascan": null,
+    "architecture_doc": "https://github.com/vsenthil7/provenance/blob/main/docs/ARCHITECTURE.md",
+    "initia_integration_doc": "https://github.com/vsenthil7/provenance/blob/main/docs/INITIA_INTEGRATION.md"
   },
   "chain": {
     "rollup_chain_id": "provenance-1",
     "vm": "minimove",
     "settlement": "initiation-2",
     "data_availability": "celestia-mocha-4",
-    "package_address": "REPLACE-init1...",
-    "first_block_at": "REPLACE-iso8601"
+    "package_address": null,
+    "first_block_at": null
   },
   "initia_primitives_used": {
     "interwovenkit": {
       "load_bearing": true,
-      "version_pinned": "2.4.0",
+      "version_pinned": "2.8.0",
       "files": ["apps/web/app/providers.tsx", "apps/web/components/wallet/ConnectButton.tsx"]
     },
     "auto_signing_authz": {
@@ -43,7 +43,7 @@
       "spend_cap_uinit": "20000000",
       "default_duration_secs": 3600,
       "max_duration_secs": 86400,
-      "files": ["apps/web/lib/authz/index.ts", "apps/web/app/settings/sessions/page.tsx"]
+      "files": ["apps/web/lib/authz/index.ts"]
     },
     "init_usernames": {
       "load_bearing": true,
@@ -56,25 +56,35 @@
     },
     "minimove_appchain": {
       "load_bearing": true,
-      "files": ["contracts/sources/*.move"]
+      "files": ["contracts/sources/artwork.move", "contracts/sources/auction.move", "contracts/sources/collection.move", "contracts/sources/market.move", "contracts/sources/royalty.move", "contracts/sources/counters.move"]
     },
     "opinit_stack": {
       "load_bearing_for_ops": true,
-      "files": ["infra/cloud-init/bootstrap.yml"]
+      "files": ["infra/hetzner/main.tf", "infra/cloud-init/bootstrap.yml"]
     }
   },
   "honest_caveats": [
-    "v0.1.0 is hackathon software. Six conditions remain between this and a production release; they are listed at /status on the live app and in docs/CUSTOMER_BUYER_REVIEW.md.",
+    "v0.1.0 is hackathon software. The submission ships the codebase + 414 passing tests; live appchain provisioning (Hetzner + Cloudflare DNS) and Vercel deployment are deferred and explicitly listed in BUILD_PLAN.md 'what we are NOT building'.",
     "Image bytes live on R2 only; an IPFS mirror is committed for v1.1. The on-chain content_hash means any party with a copy can rehost.",
-    "Move modules are not externally audited. Single-builder team. Tomas (notional auditor persona) reviewed; no external sign-off.",
+    "Move modules are not externally audited. Single-builder team. No external sign-off.",
+    "The Next.js production build (`pnpm build`) hits a webpack-5 / cosmjs-types exports-field issue carried in by @initia/interwovenkit-react@2.8.0 deep imports. Dev mode (`pnpm dev`) works; tests run; the production-build fix is post-hackathon scope.",
     "Single sequencer, single challenger. Decentralisation is a v1.x roadmap item.",
-    "No wash-trade detection. Acknowledged in customer-buyer review."
+    "No wash-trade detection. Acknowledged in CUSTOMER_BUYER_REVIEW.md."
   ],
   "test_discipline": {
-    "move_coverage_target_pct": 100,
-    "frontend_coverage_target_pct": 100,
-    "indexer_coverage_target_pct": 100,
-    "playwright_journeys": [
+    "move_tests_total": 92,
+    "move_tests_passing": 92,
+    "move_coverage_pct": 98.55,
+    "move_coverage_exemptions_used": 3,
+    "frontend_tests_total": 256,
+    "frontend_tests_passing": 256,
+    "frontend_coverage_pct": 100,
+    "frontend_coverage_exemptions_used": 2,
+    "indexer_tests_total": 66,
+    "indexer_tests_passing": 66,
+    "indexer_coverage_pct": 100,
+    "indexer_coverage_exemptions_used": 0,
+    "playwright_journeys_implemented": [
       "wallet-connect",
       "mint",
       "auction",
@@ -82,9 +92,10 @@
       "bridge-buy",
       "sequencer-down"
     ],
-    "post_deploy_smoke": "every Vercel deploy",
-    "coverage_exemption_budget": 5,
-    "coverage_exemption_used": 0
+    "post_deploy_smoke": "configured but not run (no live URL in v0.1.0-hackathon)",
+    "coverage_exemption_budget_total": 5,
+    "coverage_exemption_used_total": 5,
+    "exemption_documents": ["contracts/COVERAGE.md", "apps/web/COVERAGE.md"]
   },
   "license": {
     "code": "MIT",
