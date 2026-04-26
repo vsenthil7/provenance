@@ -1,5 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
-import { assertSha256Hex, objectKey, publicUrl, validateUpload } from './index';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import {
+  assertSha256Hex,
+  objectKey,
+  publicUrl,
+  validateUpload,
+  r2Client,
+  presignPut,
+  R2_BUCKET,
+  R2_PUBLIC_BASE,
+} from './index';
 
 describe('validateUpload', () => {
   it('accepts png', () => {
@@ -30,6 +39,16 @@ describe('validateUpload', () => {
       validateUpload({ contentType: 'image/png', size: 26 * 1024 * 1024 }).ok,
     ).toBe(false);
   });
+  it('reports the correct max-bytes reason on oversize', () => {
+    const res = validateUpload({ contentType: 'image/png', size: 26 * 1024 * 1024 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(/file too large/);
+  });
+  it('reports the correct positive-size reason on zero size', () => {
+    const res = validateUpload({ contentType: 'image/png', size: 0 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe('size must be positive');
+  });
 });
 
 describe('objectKey', () => {
@@ -47,6 +66,9 @@ describe('objectKey', () => {
 describe('publicUrl', () => {
   it('joins base + key', () => {
     expect(publicUrl('art/abc.png')).toMatch(/\/art\/abc\.png$/);
+  });
+  it('produces a string starting with the public base', () => {
+    expect(publicUrl('x')).toBe(`${R2_PUBLIC_BASE}/x`);
   });
 });
 
@@ -69,7 +91,76 @@ describe('assertSha256Hex', () => {
   });
 });
 
-// presignPut covered by api/presign route tests
+describe('r2Client factory', () => {
+  const orig = {
+    endpoint: process.env.R2_ENDPOINT,
+    key: process.env.R2_ACCESS_KEY_ID,
+    secret: process.env.R2_SECRET_ACCESS_KEY,
+  };
+  afterEach(() => {
+    process.env.R2_ENDPOINT = orig.endpoint;
+    process.env.R2_ACCESS_KEY_ID = orig.key;
+    process.env.R2_SECRET_ACCESS_KEY = orig.secret;
+  });
+
+  it('constructs an S3Client with the configured endpoint and credentials', () => {
+    process.env.R2_ENDPOINT = 'https://r2.example.com';
+    process.env.R2_ACCESS_KEY_ID = 'AKIA-test';
+    process.env.R2_SECRET_ACCESS_KEY = 'sk-test';
+    const c = r2Client();
+    expect(c).toBeDefined();
+    // Region is fixed to 'auto' for R2; the SDK exposes config as a callable.
+    expect(typeof c.config.region === 'function' || typeof c.config.region === 'string').toBe(true);
+  });
+
+  it('falls back to empty credentials when env is unset', () => {
+    delete process.env.R2_ACCESS_KEY_ID;
+    delete process.env.R2_SECRET_ACCESS_KEY;
+    const c = r2Client();
+    expect(c).toBeDefined();
+  });
+});
+
+describe('presignPut', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('returns a presigned URL string from the SDK', async () => {
+    vi.doMock('@aws-sdk/s3-request-presigner', () => ({
+      getSignedUrl: vi.fn().mockResolvedValue('https://signed.example/url?sig=abc'),
+    }));
+    const mod = await import('./index');
+    const url = await mod.presignPut('art/aa.png', 'image/png', 600);
+    expect(url).toBe('https://signed.example/url?sig=abc');
+  });
+
+  it('passes the bucket, key, content-type, and expiry to the SDK', async () => {
+    const getSignedUrl = vi.fn().mockResolvedValue('https://s/u');
+    vi.doMock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl }));
+    const mod = await import('./index');
+    await mod.presignPut('art/zz.jpeg', 'image/jpeg', 120);
+    expect(getSignedUrl).toHaveBeenCalledTimes(1);
+    const [, cmd, opts] = getSignedUrl.mock.calls[0]!;
+    expect(opts).toEqual({ expiresIn: 120 });
+    // PutObjectCommand stores its input on `.input`
+    expect((cmd as { input: { Bucket: string; Key: string; ContentType: string } }).input).toEqual({
+      Bucket: R2_BUCKET,
+      Key: 'art/zz.jpeg',
+      ContentType: 'image/jpeg',
+    });
+  });
+
+  it('defaults expiresInSec to 600 when not provided', async () => {
+    const getSignedUrl = vi.fn().mockResolvedValue('https://s/u');
+    vi.doMock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl }));
+    const mod = await import('./index');
+    await mod.presignPut('art/k.webp', 'image/webp');
+    const [, , opts] = getSignedUrl.mock.calls[0]!;
+    expect(opts).toEqual({ expiresIn: 600 });
+  });
+});
+
 describe('r2 module exports', () => {
   it('module compiles and exports the SDK functions', async () => {
     const m = await import('./index');

@@ -8,6 +8,9 @@ import {
   encodeString,
   encodeBytes,
   encodeAddress,
+  toBase64,
+  toBase64Node,
+  toBase64Browser,
 } from './messages';
 
 describe('encodeU64', () => {
@@ -50,6 +53,14 @@ describe('encodeString', () => {
     const buf = Buffer.from(encodeString(''), 'base64');
     expect(buf[0]).toBe(0);
     expect(buf.length).toBe(1);
+  });
+  it('handles strings whose ULEB128 length spans 2 bytes (>=128)', () => {
+    const long = 'a'.repeat(200);
+    const buf = Buffer.from(encodeString(long), 'base64');
+    // ULEB128 of 200 = [0xc8, 0x01]
+    expect(buf[0]).toBe(0xc8);
+    expect(buf[1]).toBe(0x01);
+    expect(buf.length).toBe(2 + 200);
   });
 });
 
@@ -140,5 +151,68 @@ describe('buildMintArtworkMessage', () => {
     });
     // sixth arg is the bool
     expect(Buffer.from(m.value.args[5], 'base64')[0]).toBe(1);
+  });
+
+  it('encodes royalty override as None (false bool) when null', () => {
+    const m = buildMintArtworkMessage({
+      sender: 'init1artist',
+      collectionObjectAddr: '0xC1',
+      title: 't',
+      contentHashHex: '00'.repeat(32),
+      imageUri: '',
+      metadataUri: '',
+      royaltyOverrideBps: null,
+    });
+    expect(Buffer.from(m.value.args[5], 'base64')[0]).toBe(0);
+    // u64 of 0 when override is null
+    expect(Buffer.from(m.value.args[6], 'base64').length).toBe(8);
+  });
+});
+
+describe('toBase64 paths', () => {
+  // Cover the routing function's truthy branch (Buffer is defined in Node).
+  it('toBase64 in Node delegates to the Buffer path', () => {
+    const out = toBase64(new Uint8Array([1, 2, 3]));
+    expect(out).toBe(toBase64Node(new Uint8Array([1, 2, 3])));
+  });
+
+  // Direct test of toBase64Node so the function is invoked even if a future
+  // refactor changes the routing.
+  it('toBase64Node produces the same bytes as Buffer.from(...).toString("base64")', () => {
+    const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+    expect(toBase64Node(bytes)).toBe(Buffer.from(bytes).toString('base64'));
+  });
+
+  // Direct test of the browser fallback path. Stub btoa so the test does
+  // not depend on the (Node 22+) global btoa polyfill.
+  it('toBase64Browser concatenates char codes and calls btoa', () => {
+    const calls: string[] = [];
+    const realBtoa = (globalThis as { btoa?: (s: string) => string }).btoa;
+    (globalThis as { btoa?: (s: string) => string }).btoa = (s: string) => {
+      calls.push(s);
+      // realistic return: a deterministic base64 of the input's char codes
+      return Buffer.from(Array.from(s, (c) => c.charCodeAt(0))).toString('base64');
+    };
+    try {
+      const out = toBase64Browser(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
+      expect(calls).toHaveLength(1);
+      // The string passed to btoa is the char-code-as-string concat
+      expect(calls[0]).toBe(
+        String.fromCharCode(0xde) +
+        String.fromCharCode(0xad) +
+        String.fromCharCode(0xbe) +
+        String.fromCharCode(0xef),
+      );
+      // The result round-trips through Buffer.from
+      expect(Buffer.from(out, 'base64').length).toBe(4);
+    } finally {
+      if (realBtoa) (globalThis as { btoa?: (s: string) => string }).btoa = realBtoa;
+      else delete (globalThis as { btoa?: (s: string) => string }).btoa;
+    }
+  });
+
+  // Cover toBase64Browser path with empty input.
+  it('toBase64Browser handles empty input', () => {
+    expect(toBase64Browser(new Uint8Array(0))).toBe('');
   });
 });

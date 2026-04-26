@@ -166,8 +166,25 @@ function encodeULEB128(n: number): Uint8Array {
   return new Uint8Array(bytes);
 }
 
-function toBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+/**
+ * Encode a byte array as base64. Uses Buffer when available (Node, Next.js
+ * server runtime), falls back to btoa() in pure browser environments.
+ *
+ * Exported and split into helpers so both branches are exercised by unit tests
+ * without monkey-patching `globalThis.Buffer`.
+ */
+export function toBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') return toBase64Node(bytes);
+  return toBase64Browser(bytes);
+}
+
+/** Node / server path. Uses the Buffer global. */
+export function toBase64Node(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('base64');
+}
+
+/** Pure-browser fallback. Uses String.fromCharCode + btoa. */
+export function toBase64Browser(bytes: Uint8Array): string {
   let bin = '';
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
