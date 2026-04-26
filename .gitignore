@@ -64,3 +64,7 @@ crash.log
 
 # mise local override
 .mise.local.toml
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
