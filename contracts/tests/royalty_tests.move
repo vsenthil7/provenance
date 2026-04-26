@@ -157,4 +157,36 @@ module provenance::royalty_tests {
         );
         test_utils::cleanup_caps(b, m);
     }
+
+    // --- royalty override happy branch ---
+    // Covers settlement_facts() option::borrow when an artwork carries an
+    // explicit override that differs from the collection default.
+
+    #[test(fw=@0x1, dep=@provenance, artist=@0xA, buyer=@0xB)]
+    fun settle_uses_artwork_royalty_override(fw: &signer, dep: &signer, artist: &signer, buyer: &signer) {
+        let (b, m) = test_utils::setup(fw, dep);
+        let artist_addr = signer::address_of(artist);
+        let buyer_addr = signer::address_of(buyer);
+        test_utils::fund(artist_addr, 0, &m);
+        test_utils::fund(buyer_addr, 100_000_000, &m);
+        test_utils::fund(test_utils::treasury_addr(), 0, &m);
+
+        // Collection default is 200 (2%), artwork override is 700 (7%).
+        // The override branch in settlement_facts must win.
+        let col = provenance::collection::create_collection_for_test(artist, 200);
+        let art = provenance::artwork::mint_with_override_for_test(
+            artist, col, std::string::utf8(b"X"), test_utils::valid_hash(), 700,
+        );
+        let listing = market::list_fixed_for_test(artist, art, 1_000_000, 0);
+        let payment = test_utils::mint_coin(1_000_000, &m);
+        market::buy_now_with_coin(buyer, listing, payment);
+
+        // 7% royalty (70_000) + 0.5% fee (5_000) + 925_000 seller_net.
+        // Artist is both creator and seller on first sale, so artist receives
+        // royalty + seller_net = 70_000 + 925_000 = 995_000.
+        assert!(coin::balance<AptosCoin>(artist_addr) == 995_000, 0);
+        assert!(coin::balance<AptosCoin>(test_utils::treasury_addr()) == 5_000, 1);
+        assert!(object::is_owner(art, buyer_addr), 2);
+        test_utils::cleanup_caps(b, m);
+    }
 }

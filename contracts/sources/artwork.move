@@ -195,6 +195,45 @@ module provenance::artwork {
 
     // ---- test-only helpers ----
 
+    /// Test-only mint with explicit royalty_override. Mirrors `mint_for_test`
+    /// but stores `option::some(override_bps)` so `settlement_facts` exercises
+    /// the override branch.
+    #[test_only]
+    public fun mint_with_override_for_test(
+        artist: &signer,
+        collection_obj: Object<Collection>,
+        title: String,
+        content_hash: vector<u8>,
+        override_bps: u64,
+    ): Object<Artwork> {
+        let artist_addr = signer::address_of(artist);
+        let (_col_id, col_artist, _default_bps, frozen, supply_remaining) =
+            collection::mint_facts(&collection_obj);
+        assert!(artist_addr == col_artist, error::permission_denied(E_NOT_ARTIST));
+        assert!(!frozen, error::invalid_state(E_COLLECTION_FROZEN));
+        assert!(supply_remaining, error::invalid_state(E_SUPPLY_EXHAUSTED));
+        assert!(vector::length(&content_hash) == HASH_LEN, error::invalid_argument(E_BAD_HASH_LENGTH));
+        assert!(override_bps <= MAX_ROYALTY_BPS, error::invalid_argument(E_ROYALTY_BPS_TOO_HIGH));
+
+        let edition_no = collection::increment_supply(&collection_obj);
+        let id = next_id();
+        let constructor_ref = object::create_object(artist_addr);
+        let extend_ref = object::generate_extend_ref(&constructor_ref);
+        let transfer_ref = object::generate_transfer_ref(&constructor_ref);
+        let object_signer = object::generate_signer(&constructor_ref);
+        let artwork = Artwork {
+            id, collection: collection_obj, edition_no, title, content_hash,
+            image_uri: std::string::utf8(b"https://r2.example/art.png"),
+            metadata_uri: std::string::utf8(b""),
+            royalty_override_bps: option::some(override_bps),
+            creator: col_artist,
+            minted_at: timestamp_now(),
+            extend_ref, transfer_ref,
+        };
+        move_to(&object_signer, artwork);
+        object::object_from_constructor_ref<Artwork>(&constructor_ref)
+    }
+
     #[test_only]
     public fun mint_for_test(
         artist: &signer,
