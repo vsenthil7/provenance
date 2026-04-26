@@ -128,6 +128,58 @@ describe('syncOnce', () => {
     expect(db.height).toBe(50n);
     expect(r.lagBlocks).toBe(150n);
   });
+
+  // Cover the inner per-event writeEvent loop (sync.ts:84-86) by feeding
+  // a block whose tx_responses contain provenance events to decode and
+  // write through the FakeDb.
+  it('writes every decoded event to the DbWriter', async () => {
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.endsWith('/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: { sync_info: { latest_block_height: '1' } },
+          }),
+        });
+      }
+      // single block with 2 provenance events on a single tx
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          tx_responses: [
+            {
+              txhash: 'BBBB',
+              timestamp: '2024-01-01T00:00:00Z',
+              events: [
+                {
+                  type: `${PKG}::artwork::GiftEvent`,
+                  attributes: [
+                    { key: 'artwork_id', value: '1' },
+                    { key: 'from', value: 'init1a' },
+                    { key: 'to', value: 'init1b' },
+                  ],
+                },
+                {
+                  type: `${PKG}::artwork::GiftEvent`,
+                  attributes: [
+                    { key: 'artwork_id', value: '2' },
+                    { key: 'from', value: 'init1b' },
+                    { key: 'to', value: 'init1c' },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      });
+    });
+    const db = new FakeDb();
+    const r = await syncOnce(db);
+    expect(r.blocksProcessed).toBe(1);
+    expect(db.written).toHaveLength(2);
+    expect(db.written[0].ev.kind).toBe('Gift');
+    expect(db.height).toBe(1n);
+  });
 });
 
 describe('startPolling', () => {
@@ -179,4 +231,93 @@ describe('startPolling', () => {
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
   }, 5000);
+
+  // Cover sync.ts:99-100 — the console.log when at least one block was
+  // processed (blocksProcessed > 0). We respond with tip=1 and db.height=0
+  // so the first iteration of startPolling has work to do.
+  it('logs progress when at least one block was processed', async () => {
+    let statusCalls = 0;
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.endsWith('/status')) {
+        statusCalls++;
+        // First call: tip=1 (one block to process). Subsequent: caught up.
+        const height = statusCalls === 1 ? '1' : '1';
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: { sync_info: { latest_block_height: height } },
+          }),
+        });
+      }
+      // Block fetches: empty events to keep the test fast
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ tx_responses: [] }),
+      });
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { startPolling } = await import('../src/sync');
+    const ac = new AbortController();
+    const db = new FakeDb();
+    const p = startPolling(db, ac.signal);
+    await new Promise((r) => setTimeout(r, 50));
+    ac.abort();
+    await Promise.race([p, new Promise((r) => setTimeout(r, 1700))]);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[sync]'));
+    logSpy.mockRestore();
+  }, 5000);
+
+  // Cover sync.ts:56-58 — the `tx.txhash ?? ''` and `tx.timestamp ? ... : 0n`
+  // fallbacks. Every happy-path test passes both fields; this exercises the
+  // case where a tx_response is missing both.
+  it('handles tx_responses with missing txhash and timestamp', async () => {
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('/cosmos/tx/v1beta1/txs/block/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            tx_responses: [
+              {
+                // Both txhash and timestamp omitted; the decoder must fall
+                // through to '' and 0n respectively without throwing.
+                events: [
+                  {
+                    type: `${PKG}::market::ListingCancelledEvent`,
+                    attributes: [{ key: 'id', value: '1' }],
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    const out = await fetchBlockEvents(123n);
+    // The transaction has no txhash and no timestamp, but the event still
+    // decodes; the BlockContext should carry txHash='' and blockTimeUnix=0n.
+    expect(out).toHaveLength(1);
+    expect(out[0].ctx.txHash).toBe('');
+    expect(out[0].ctx.blockTimeUnix).toBe(0n);
+  });
+
+  // Cover sync.ts:58 — the `tx.events ?? []` fallback. A tx_response with
+  // no `events` field must produce zero output items, not throw.
+  it('skips tx_responses with no events field', async () => {
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('/cosmos/tx/v1beta1/txs/block/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            tx_responses: [
+              { txhash: 'AB12', timestamp: '2026-01-01T00:00:00Z' /* events omitted */ },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    const out = await fetchBlockEvents(124n);
+    expect(out).toEqual([]);
+  });
 });

@@ -94,4 +94,33 @@ describe('makeDbWriter', () => {
     expect(typeof writer.getLastHeight).toBe('function');
     vi.doUnmock('pg');
   });
+
+  // Cover the SqlClient.exec and SqlClient.query closures that makeDbWriter
+  // constructs around the pg Pool. The previous test constructs the writer
+  // but never invokes the Sql adapter; this one drives a full round-trip.
+  it('returned writer.getLastHeight invokes the pg-backed SqlClient query', async () => {
+    let queryCalls = 0;
+    vi.resetModules();
+    vi.doMock('pg', () => {
+      class Pool {
+        constructor(_opts: unknown) {}
+        async query(_q: string, _p?: unknown[]) {
+          queryCalls++;
+          // First call is getLastHeight → rows length 0 → the writer should
+          // INSERT and return 0n. The INSERT is a second pool.query call.
+          return { rows: [] };
+        }
+        async end() {}
+      }
+      return { default: { Pool }, Pool };
+    });
+    process.env.DATABASE_URL = 'postgres://test';
+    const { makeDbWriter: makeDbWriter2 } = await import('../src/writer');
+    const writer = await makeDbWriter2();
+    const h = await writer.getLastHeight();
+    expect(h).toBe(0n);
+    expect(queryCalls).toBeGreaterThanOrEqual(2);
+    vi.doUnmock('pg');
+    vi.resetModules();
+  });
 });
